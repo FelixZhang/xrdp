@@ -21,23 +21,21 @@
 #if defined(HAVE_CONFIG_H)
 #include <config_ac.h>
 #endif
-#define ACCESS
 #include "xrdp.h"
 #include "log.h"
 
-#ifdef ACCESS
 #ifndef USE_NOPAM
 #if defined(HAVE__PAM_TYPES_H)
 #define LINUXPAM 1
-#include "security/_pam_types.h"
+#include <security/_pam_types.h>
 #elif defined(HAVE_PAM_CONSTANTS_H)
 #define OPENPAM 1
 #include <security/pam_constants.h>
 #endif
 #endif /* USE_NOPAM */
-#endif /* ACCESS */
 
 #include "xrdp_encoder.h"
+#include "xrdp_sockets.h"
 
 #define LLOG_LEVEL 1
 #define LLOGLN(_level, _args) \
@@ -52,7 +50,7 @@
   while (0)
 
 /*****************************************************************************/
-struct xrdp_mm *APP_CC
+struct xrdp_mm *
 xrdp_mm_create(struct xrdp_wm *owner)
 {
     struct xrdp_mm *self;
@@ -81,7 +79,7 @@ xrdp_mm_create(struct xrdp_wm *owner)
 
 /*****************************************************************************/
 /* called from main thread */
-static long DEFAULT_CC
+static long
 xrdp_mm_sync_unload(long param1, long param2)
 {
     return g_free_library(param1);
@@ -89,7 +87,7 @@ xrdp_mm_sync_unload(long param1, long param2)
 
 /*****************************************************************************/
 /* called from main thread */
-static long DEFAULT_CC
+static long
 xrdp_mm_sync_load(long param1, long param2)
 {
     long rv;
@@ -101,7 +99,7 @@ xrdp_mm_sync_load(long param1, long param2)
 }
 
 /*****************************************************************************/
-static void APP_CC
+static void
 xrdp_mm_module_cleanup(struct xrdp_mm *self)
 {
     log_message(LOG_LEVEL_DEBUG, "xrdp_mm_module_cleanup");
@@ -139,7 +137,7 @@ xrdp_mm_module_cleanup(struct xrdp_mm *self)
 }
 
 /*****************************************************************************/
-void APP_CC
+void
 xrdp_mm_delete(struct xrdp_mm *self)
 {
     if (self == 0)
@@ -163,7 +161,7 @@ xrdp_mm_delete(struct xrdp_mm *self)
 
 /*****************************************************************************/
 /* Send login information to sesman */
-static int APP_CC
+static int
 xrdp_mm_send_login(struct xrdp_mm *self)
 {
     struct stream *s;
@@ -295,7 +293,7 @@ xrdp_mm_send_login(struct xrdp_mm *self)
 /* this goes through the login_names looking for one called 'aname'
    then it copies the corresponding login_values item into 'dest'
    'dest' must be at least 'dest_len' + 1 bytes in size */
-static int APP_CC
+static int
 xrdp_mm_get_value(struct xrdp_mm *self, const char *aname, char *dest,
                   int dest_len)
 {
@@ -331,7 +329,7 @@ xrdp_mm_get_value(struct xrdp_mm *self, const char *aname, char *dest,
 }
 
 /*****************************************************************************/
-static int APP_CC
+static int
 xrdp_mm_setup_mod1(struct xrdp_mm *self)
 {
     void *func;
@@ -472,6 +470,7 @@ xrdp_mm_setup_mod1(struct xrdp_mm *self)
             self->mod->server_paint_rect_bpp = server_paint_rect_bpp;
             self->mod->server_composite = server_composite;
             self->mod->server_paint_rects = server_paint_rects;
+            self->mod->server_session_info = server_session_info;
             self->mod->si = (tintptr) &(self->wm->session->si);
         }
     }
@@ -487,12 +486,12 @@ xrdp_mm_setup_mod1(struct xrdp_mm *self)
 }
 
 /*****************************************************************************/
-static int APP_CC
+static int
 xrdp_mm_setup_mod2(struct xrdp_mm *self, tui8 *guid)
 {
     char text[256];
-    char *name;
-    char *value;
+    const char *name;
+    const char *value;
     int i;
     int rv;
     int key_flags;
@@ -562,7 +561,7 @@ xrdp_mm_setup_mod2(struct xrdp_mm *self, tui8 *guid)
         /* always set these */
 
         self->mod->mod_set_param(self->mod, "client_info",
-                                 (char *)(self->wm->session->client_info));
+                                 (const char *) (self->wm->session->client_info));
 
         name = self->wm->session->client_info->hostname;
         self->mod->mod_set_param(self->mod, "hostname", name);
@@ -575,8 +574,8 @@ xrdp_mm_setup_mod2(struct xrdp_mm *self, tui8 *guid)
 
         for (i = 0; i < self->login_names->count; i++)
         {
-            name = (char *)list_get_item(self->login_names, i);
-            value = (char *)list_get_item(self->login_values, i);
+            name = (const char *) list_get_item(self->login_names, i);
+            value = (const char *) list_get_item(self->login_values, i);
             self->mod->mod_set_param(self->mod, name, value);
         }
 
@@ -632,7 +631,7 @@ xrdp_mm_setup_mod2(struct xrdp_mm *self, tui8 *guid)
 /*****************************************************************************/
 /* returns error
    send a list of channels to the channel handler */
-static int APP_CC
+static int
 xrdp_mm_trans_send_channel_setup(struct xrdp_mm *self, struct trans *trans)
 {
     int index;
@@ -682,7 +681,7 @@ xrdp_mm_trans_send_channel_setup(struct xrdp_mm *self, struct trans *trans)
 
 /*****************************************************************************/
 /* returns error */
-static int APP_CC
+static int
 xrdp_mm_trans_send_channel_data_response(struct xrdp_mm *self,
         struct trans *trans)
 {
@@ -706,7 +705,7 @@ xrdp_mm_trans_send_channel_data_response(struct xrdp_mm *self,
 /*****************************************************************************/
 /* returns error
    init is done, sent channel setup */
-static int APP_CC
+static int
 xrdp_mm_trans_process_init_response(struct xrdp_mm *self, struct trans *trans)
 {
     return xrdp_mm_trans_send_channel_setup(self, trans);
@@ -715,7 +714,7 @@ xrdp_mm_trans_process_init_response(struct xrdp_mm *self, struct trans *trans)
 /*****************************************************************************/
 /* returns error
    data coming in from the channel handler, send it to the client */
-static int APP_CC
+static int
 xrdp_mm_trans_process_channel_data(struct xrdp_mm *self, struct trans *trans)
 {
     struct stream *s;
@@ -740,8 +739,11 @@ xrdp_mm_trans_process_channel_data(struct xrdp_mm *self, struct trans *trans)
 
     if (rv == 0)
     {
-        rv = libxrdp_send_to_channel(self->wm->session, chan_id, s->p, size, total_size,
-                                     chan_flags);
+        if (is_channel_allowed(self->wm, chan_id))
+        {
+            rv = libxrdp_send_to_channel(self->wm->session, chan_id, s->p, size, total_size,
+                                         chan_flags);
+        }
     }
 
     return rv;
@@ -750,7 +752,7 @@ xrdp_mm_trans_process_channel_data(struct xrdp_mm *self, struct trans *trans)
 /*****************************************************************************/
 /* returns error
    process rail create window order */
-static int APP_CC
+static int
 xrdp_mm_process_rail_create_window(struct xrdp_mm* self, struct stream* s)
 {
     int flags;
@@ -819,8 +821,14 @@ xrdp_mm_process_rail_create_window(struct xrdp_mm* self, struct stream* s)
     }
     in_uint32_le(s, flags);
     rv = libxrdp_orders_init(self->wm->session);
-    rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
-    rv = libxrdp_orders_send(self->wm->session);
+    if (rv == 0)
+    {
+        rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
+    }
+    if (rv == 0)
+    {
+        rv = libxrdp_orders_send(self->wm->session);
+    }
     g_free(rwso.title_info);
     g_free(rwso.window_rects);
     g_free(rwso.visibility_rects);
@@ -831,7 +839,7 @@ xrdp_mm_process_rail_create_window(struct xrdp_mm* self, struct stream* s)
 /*****************************************************************************/
 /* returns error
    process rail configure window order */
-static int APP_CC
+static int
 xrdp_mm_process_rail_configure_window(struct xrdp_mm* self, struct stream* s)
 {
     int flags;
@@ -888,8 +896,14 @@ xrdp_mm_process_rail_configure_window(struct xrdp_mm* self, struct stream* s)
     }
     in_uint32_le(s, flags);
     rv = libxrdp_orders_init(self->wm->session);
-    rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
-    rv = libxrdp_orders_send(self->wm->session);
+    if (rv == 0)
+    {
+        rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
+    }
+    if (rv == 0)
+    {
+        rv = libxrdp_orders_send(self->wm->session);
+    }
     g_free(rwso.window_rects);
     g_free(rwso.visibility_rects);
     return rv;
@@ -899,7 +913,7 @@ xrdp_mm_process_rail_configure_window(struct xrdp_mm* self, struct stream* s)
 /*****************************************************************************/
 /* returns error
    process rail destroy window order */
-static int APP_CC
+static int
 xrdp_mm_process_rail_destroy_window(struct xrdp_mm* self, struct stream* s)
 {
     int window_id;
@@ -908,15 +922,21 @@ xrdp_mm_process_rail_destroy_window(struct xrdp_mm* self, struct stream* s)
     in_uint32_le(s, window_id);
     g_writeln("xrdp_mm_process_rail_destroy_window 0x%8.8x", window_id);
     rv = libxrdp_orders_init(self->wm->session);
-    rv = libxrdp_window_delete(self->wm->session, window_id);
-    rv = libxrdp_orders_send(self->wm->session);
+    if (rv == 0)
+    {
+        rv = libxrdp_window_delete(self->wm->session, window_id);
+    }
+    if (rv == 0)
+    {
+        rv = libxrdp_orders_send(self->wm->session);
+    }
     return rv;
 }
 
 /*****************************************************************************/
 /* returns error
    process rail update window (show state) order */
-static int APP_CC
+static int
 xrdp_mm_process_rail_show_window(struct xrdp_mm* self, struct stream* s)
 {
     int window_id;
@@ -931,15 +951,21 @@ xrdp_mm_process_rail_show_window(struct xrdp_mm* self, struct stream* s)
     g_writeln("xrdp_mm_process_rail_show_window 0x%8.8x %x", window_id,
               rwso.show_state);
     rv = libxrdp_orders_init(self->wm->session);
-    rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
-    rv = libxrdp_orders_send(self->wm->session);
+    if (rv == 0)
+    {
+        rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
+    }
+    if (rv == 0)
+    {
+        rv = libxrdp_orders_send(self->wm->session);
+    }
     return rv;
 }
 
 /*****************************************************************************/
 /* returns error
    process rail update window (title) order */
-static int APP_CC
+static int
 xrdp_mm_process_rail_update_window_text(struct xrdp_mm* self, struct stream* s)
 {
     int size;
@@ -961,8 +987,14 @@ xrdp_mm_process_rail_update_window_text(struct xrdp_mm* self, struct stream* s)
     rwso.title_info[size] = 0;
     g_writeln("  set window title %s size %d 0x%8.8x", rwso.title_info, size, flags);
     rv = libxrdp_orders_init(self->wm->session);
-    rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
-    rv = libxrdp_orders_send(self->wm->session);
+    if (rv == 0)
+    {
+        rv = libxrdp_window_new_update(self->wm->session, window_id, &rwso, flags);
+    }
+    if (rv == 0)
+    {
+        rv = libxrdp_orders_send(self->wm->session);
+    }
     g_writeln("  set window title %s %d", rwso.title_info, rv);
 
     g_free(rwso.title_info);
@@ -973,7 +1005,7 @@ xrdp_mm_process_rail_update_window_text(struct xrdp_mm* self, struct stream* s)
 /*****************************************************************************/
 /* returns error
    process alternate secondary drawing orders for rail channel */
-static int APP_CC
+static int
 xrdp_mm_process_rail_drawing_orders(struct xrdp_mm* self, struct trans* trans)
 {
     struct stream* s;
@@ -1011,7 +1043,7 @@ xrdp_mm_process_rail_drawing_orders(struct xrdp_mm* self, struct trans* trans)
 /*****************************************************************************/
 /* returns error
    process a message for the channel handler */
-static int APP_CC
+static int
 xrdp_mm_chan_process_msg(struct xrdp_mm *self, struct trans *trans,
                          struct stream *s)
 {
@@ -1063,7 +1095,7 @@ xrdp_mm_chan_process_msg(struct xrdp_mm *self, struct trans *trans,
 /*****************************************************************************/
 /* this is callback from trans obj
    returns error */
-static int APP_CC
+static int
 xrdp_mm_chan_data_in(struct trans *trans)
 {
     struct xrdp_mm *self;
@@ -1098,7 +1130,7 @@ xrdp_mm_chan_data_in(struct trans *trans)
 }
 
 /*****************************************************************************/
-static int APP_CC
+static int
 xrdp_mm_chan_send_init(struct xrdp_mm *self)
 {
     struct stream *s;
@@ -1120,7 +1152,7 @@ xrdp_mm_chan_send_init(struct xrdp_mm *self)
 
 /*****************************************************************************/
 /* connect to chansrv */
-static int APP_CC
+static int
 xrdp_mm_connect_chansrv(struct xrdp_mm *self, const char *ip, const char *port)
 {
     int index;
@@ -1196,7 +1228,7 @@ static void cleanup_sesman_connection(struct xrdp_mm *self)
 }
 
 /*****************************************************************************/
-static int APP_CC
+static int
 xrdp_mm_process_login_response(struct xrdp_mm *self, struct stream *s)
 {
     int ok;
@@ -1274,11 +1306,11 @@ xrdp_mm_get_sesman_port(char *port, int port_bytes)
     g_memset(cfg_file, 0, sizeof(char) * 256);
     /* default to port 3350 */
     g_strncpy(port, "3350", port_bytes - 1);
-    /* see if port is in xrdp.ini file */
+    /* see if port is in sesman.ini file */
     g_snprintf(cfg_file, 255, "%s/sesman.ini", XRDP_CFG_PATH);
     fd = g_file_open(cfg_file);
 
-    if (fd > 0)
+    if (fd >= 0)
     {
         names = list_create();
         names->auto_free = 1;
@@ -1311,10 +1343,8 @@ xrdp_mm_get_sesman_port(char *port, int port_bytes)
 
         list_delete(names);
         list_delete(values);
-    }
-
-    if (fd != -1)
         g_file_close(fd);
+    }
 
     return 0;
 }
@@ -1322,7 +1352,7 @@ xrdp_mm_get_sesman_port(char *port, int port_bytes)
 /*****************************************************************************/
 /* returns error
    data coming from client that need to go to channel handler */
-int APP_CC
+int
 xrdp_mm_process_channel_data(struct xrdp_mm *self, tbus param1, tbus param2,
                              tbus param3, tbus param4)
 {
@@ -1373,7 +1403,7 @@ xrdp_mm_process_channel_data(struct xrdp_mm *self, tbus param1, tbus param2,
 
 /*****************************************************************************/
 /* This is the callback registered for sesman communication replies. */
-static int APP_CC
+static int
 xrdp_mm_sesman_data_in(struct trans *trans)
 {
     struct xrdp_mm *self;
@@ -1422,11 +1452,10 @@ xrdp_mm_sesman_data_in(struct trans *trans)
     return error;
 }
 
-#ifdef ACCESS
 #ifndef USE_NOPAM
 /*********************************************************************/
 /* return 0 on success */
-static int APP_CC
+static int
 access_control(char *username, char *password, char *newpass, char *srv, int type)
 {
     int reply;
@@ -1440,11 +1469,13 @@ access_control(char *username, char *password, char *newpass, char *srv, int typ
     unsigned long size;
     int index;
     int socket = g_tcp_socket();
+    char port[8];
 
     if (socket != -1)
     {
+        xrdp_mm_get_sesman_port(port, sizeof(port));
         /* we use a blocking socket here */
-        reply = g_tcp_connect(socket, srv, "3350");
+        reply = g_tcp_connect(socket, srv, port);
 
         if (reply == 0)
         {
@@ -1553,13 +1584,12 @@ access_control(char *username, char *password, char *newpass, char *srv, int typ
     return rec;
 }
 #endif
-#endif
 
 /*****************************************************************************/
 /* This routine clears all states to make sure that our next login will be
  * as expected. If the user does not press ok on the log window and try to
  * connect again we must make sure that no previous information is stored.*/
-static void APP_CC
+static void
 cleanup_states(struct xrdp_mm *self)
 {
     if (self != NULL)
@@ -1578,9 +1608,8 @@ cleanup_states(struct xrdp_mm *self)
     }
 }
 
-#ifdef ACCESS
 #ifndef USE_NOPAM
-static const char * APP_CC
+static const char *
 getPAMError(const int pamError, char *text, int text_bytes)
 {
     switch (pamError)
@@ -1719,7 +1748,7 @@ getPAMError(const int pamError, char *text, int text_bytes)
     }
 }
 
-static const char * APP_CC
+static const char *
 getPAMAdditionalErrorInfo(const int pamError, struct xrdp_mm *self)
 {
     switch (pamError)
@@ -1814,9 +1843,9 @@ getPAMAdditionalErrorInfo(const int pamError, struct xrdp_mm *self)
     }
 }
 #endif
-#endif
+
 /*****************************************************************************/
-int APP_CC
+int
 xrdp_mm_connect(struct xrdp_mm *self)
 {
     struct list *names;
@@ -1830,7 +1859,6 @@ xrdp_mm_connect(struct xrdp_mm *self)
     char ip[256];
     char port[8];
     char chansrvport[256];
-#ifdef ACCESS
 #ifndef USE_NOPAM
     int use_pam_auth_explicit = 0;
     char pam_auth_sessionIP[256];
@@ -1841,7 +1869,7 @@ xrdp_mm_connect(struct xrdp_mm *self)
     char password[256];
     username[0] = 0;
     password[0] = 0;
-#endif
+
     /* make sure we start in correct state */
     cleanup_states(self);
     g_memset(ip, 0, sizeof(ip));
@@ -1869,7 +1897,6 @@ xrdp_mm_connect(struct xrdp_mm *self)
             }
         }
 
-#ifdef ACCESS
 #ifndef USE_NOPAM
         else if (g_strcasecmp(name, "pamusername") == 0)
         {
@@ -1893,8 +1920,6 @@ xrdp_mm_connect(struct xrdp_mm *self)
         {
             g_strncpy(username, value, 255);
         }
-
-#endif
         else if (g_strcasecmp(name, "chansrvport") == 0)
         {
             g_strncpy(chansrvport, value, 255);
@@ -1902,7 +1927,6 @@ xrdp_mm_connect(struct xrdp_mm *self)
         }
     }
 
-#ifdef ACCESS
 #ifndef USE_NOPAM
     int reply;
     char replytxt[128];
@@ -1966,7 +1990,6 @@ xrdp_mm_connect(struct xrdp_mm *self)
         rv = 1;
         return rv;
     }
-#endif
 #endif
 
     if (self->sesman_controlled)
@@ -2059,6 +2082,7 @@ xrdp_mm_connect(struct xrdp_mm *self)
 }
 
 /*****************************************************************************/
+<<<<<<< HEAD
 /* return 0 on success */
 int APP_CC
 xrdp_mm_change_expired_password(struct xrdp_mm *self)
@@ -2113,6 +2137,9 @@ xrdp_mm_change_expired_password(struct xrdp_mm *self)
 
 /*****************************************************************************/
 int APP_CC
+=======
+int
+>>>>>>> upstream/master
 xrdp_mm_get_wait_objs(struct xrdp_mm *self,
                       tbus *read_objs, int *rcount,
                       tbus *write_objs, int *wcount, int *timeout)
@@ -2158,7 +2185,7 @@ xrdp_mm_get_wait_objs(struct xrdp_mm *self,
 #if DUMP_JPEG
 
 /*****************************************************************************/
-static int APP_CC
+static int
 xrdp_mm_dump_jpeg(struct xrdp_mm *self, XRDP_ENC_DATA_DONE *enc_done)
 {
     static tbus ii;
@@ -2209,7 +2236,7 @@ xrdp_mm_dump_jpeg(struct xrdp_mm *self, XRDP_ENC_DATA_DONE *enc_done)
 #endif
 
 /*****************************************************************************/
-int APP_CC
+int
 xrdp_mm_check_chan(struct xrdp_mm *self)
 {
     //g_writeln("xrdp_mm_check_chan:");
@@ -2231,17 +2258,98 @@ xrdp_mm_check_chan(struct xrdp_mm *self)
 }
 
 /*****************************************************************************/
-int APP_CC
-xrdp_mm_check_wait_objs(struct xrdp_mm *self)
+static int
+xrdp_mm_update_module_frame_ack(struct xrdp_mm *self)
+{
+    int fif;
+    struct xrdp_encoder *encoder;
+
+    encoder = self->encoder;
+    fif = encoder->frames_in_flight;
+    if (encoder->frame_id_client + fif > encoder->frame_id_server)
+    {
+        if (encoder->frame_id_server > encoder->frame_id_server_sent)
+        {
+            LLOGLN(10, ("xrdp_mm_update_module_ack: frame_id_server %d",
+                   encoder->frame_id_server));
+            encoder->frame_id_server_sent = encoder->frame_id_server;
+            self->mod->mod_frame_ack(self->mod, 0, encoder->frame_id_server);
+        }
+    }
+    return 0;
+}
+
+/*****************************************************************************/
+static int
+xrdp_mm_process_enc_done(struct xrdp_mm *self)
 {
     XRDP_ENC_DATA_DONE *enc_done;
-    int rv;
     int x;
     int y;
     int cx;
     int cy;
-    int use_frame_acks;
-    int ex;
+
+    while (1)
+    {
+        tc_mutex_lock(self->encoder->mutex);
+        enc_done = (XRDP_ENC_DATA_DONE *)
+                   fifo_remove_item(self->encoder->fifo_processed);
+        tc_mutex_unlock(self->encoder->mutex);
+        if (enc_done == NULL)
+        {
+            break;
+        }
+        /* do something with msg */
+        LLOGLN(10, ("xrdp_mm_process_enc_done: message back bytes %d",
+               enc_done->comp_bytes));
+        x = enc_done->x;
+        y = enc_done->y;
+        cx = enc_done->cx;
+        cy = enc_done->cy;
+        if (enc_done->comp_bytes > 0)
+        {
+            libxrdp_fastpath_send_frame_marker(self->wm->session, 0,
+                                               enc_done->enc->frame_id);
+            libxrdp_fastpath_send_surface(self->wm->session,
+                                          enc_done->comp_pad_data,
+                                          enc_done->pad_bytes,
+                                          enc_done->comp_bytes,
+                                          x, y, x + cx, y + cy,
+                                          32, self->encoder->codec_id,
+                                          cx, cy);
+            libxrdp_fastpath_send_frame_marker(self->wm->session, 1,
+                                               enc_done->enc->frame_id);
+        }
+        /* free enc_done */
+        if (enc_done->last)
+        {
+            LLOGLN(10, ("xrdp_mm_process_enc_done: last set"));
+            if (self->wm->client_info->use_frame_acks == 0)
+            {
+                self->mod->mod_frame_ack(self->mod,
+                                         enc_done->enc->flags,
+                                         enc_done->enc->frame_id);
+            }
+            else
+            {
+                self->encoder->frame_id_server = enc_done->enc->frame_id;
+                xrdp_mm_update_module_frame_ack(self);
+            }
+            g_free(enc_done->enc->drects);
+            g_free(enc_done->enc->crects);
+            g_free(enc_done->enc);
+        }
+        g_free(enc_done->comp_pad_data);
+        g_free(enc_done);
+    }
+    return 0;
+}
+
+/*****************************************************************************/
+int
+xrdp_mm_check_wait_objs(struct xrdp_mm *self)
+{
+    int rv;
 
     if (self == 0)
     {
@@ -2250,7 +2358,7 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
 
     rv = 0;
 
-    if ((self->sesman_trans != 0) && self->sesman_trans_up)
+    if ((self->sesman_trans != NULL) && self->sesman_trans_up)
     {
         if (trans_check_wait_objs(self->sesman_trans) != 0)
         {
@@ -2263,7 +2371,7 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
         }
     }
 
-    if ((self->chan_trans != 0) && self->chan_trans_up)
+    if ((self->chan_trans != NULL) && self->chan_trans_up)
     {
         if (trans_check_wait_objs(self->chan_trans) != 0)
         {
@@ -2271,9 +2379,9 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
         }
     }
 
-    if (self->mod != 0)
+    if (self->mod != NULL)
     {
-        if (self->mod->mod_check_wait_objs != 0)
+        if (self->mod->mod_check_wait_objs != NULL)
         {
             rv = self->mod->mod_check_wait_objs(self->mod);
         }
@@ -2282,7 +2390,7 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
     if (self->delete_sesman_trans)
     {
         trans_delete(self->sesman_trans);
-        self->sesman_trans = 0;
+        self->sesman_trans = NULL;
         self->sesman_trans_up = 0;
         self->delete_sesman_trans = 0;
     }
@@ -2290,88 +2398,17 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
     if (self->delete_chan_trans)
     {
         trans_delete(self->chan_trans);
-        self->chan_trans = 0;
+        self->chan_trans = NULL;
         self->chan_trans_up = 0;
         self->delete_chan_trans = 0;
     }
 
-    if (self->encoder != 0)
+    if (self->encoder != NULL)
     {
-
-        use_frame_acks = self->wm->client_info->use_frame_acks;
-
         if (g_is_wait_obj_set(self->encoder->xrdp_encoder_event_processed))
         {
             g_reset_wait_obj(self->encoder->xrdp_encoder_event_processed);
-            tc_mutex_lock(self->encoder->mutex);
-            enc_done = (XRDP_ENC_DATA_DONE*)
-                       fifo_remove_item(self->encoder->fifo_processed);
-            tc_mutex_unlock(self->encoder->mutex);
-            while (enc_done != 0)
-            {
-                /* do something with msg */
-                LLOGLN(10, ("xrdp_mm_check_wait_objs: message back bytes %d",
-                       enc_done->comp_bytes));
-
-                x = enc_done->x;
-                y = enc_done->y;
-                cx = enc_done->cx;
-                cy = enc_done->cy;
-
-#if DUMP_JPEG
-                xrdp_mm_dump_jpeg(self, enc_done);
-#endif
-
-                if (enc_done->comp_bytes > 0)
-                {
-                    libxrdp_fastpath_send_frame_marker(self->wm->session, 0,
-                                                       enc_done->enc->frame_id);
-                    libxrdp_fastpath_send_surface(self->wm->session,
-                                                  enc_done->comp_pad_data,
-                                                  enc_done->pad_bytes,
-                                                  enc_done->comp_bytes,
-                                                  x, y, x + cx, y + cy,
-                                                  32, self->encoder->codec_id, cx, cy);
-                    libxrdp_fastpath_send_frame_marker(self->wm->session, 1,
-                                                       enc_done->enc->frame_id);
-                }
-
-                /* free enc_done */
-                if (enc_done->last)
-                {
-                    LLOGLN(10, ("xrdp_mm_check_wait_objs: last set"));
-                    if (use_frame_acks == 0)
-                    {
-                        self->mod->mod_frame_ack(self->mod,
-                                                 enc_done->enc->flags,
-                                                 enc_done->enc->frame_id);
-                    }
-                    else
-                    {
-#if 1
-                        ex = self->wm->client_info->max_unacknowledged_frame_count;
-                        if (self->encoder->frame_id_client + ex > self->encoder->frame_id_server)
-                        {
-                            if (self->encoder->frame_id_server > self->encoder->frame_id_server_sent)
-                            {
-                                LLOGLN(10, ("xrdp_mm_check_wait_objs: 1 -- %d", self->encoder->frame_id_server));
-                                self->encoder->frame_id_server_sent = self->encoder->frame_id_server;
-                                self->mod->mod_frame_ack(self->mod, 0, self->encoder->frame_id_server);
-                            }
-                        }
-#endif
-                    }
-                    g_free(enc_done->enc->drects);
-                    g_free(enc_done->enc->crects);
-                    g_free(enc_done->enc);
-                }
-                g_free(enc_done->comp_pad_data);
-                g_free(enc_done);
-                tc_mutex_lock(self->encoder->mutex);
-                enc_done = (XRDP_ENC_DATA_DONE*)
-                           fifo_remove_item(self->encoder->fifo_processed);
-                tc_mutex_unlock(self->encoder->mutex);
-            }
+            xrdp_mm_process_enc_done(self);
         }
     }
     return rv;
@@ -2379,33 +2416,39 @@ xrdp_mm_check_wait_objs(struct xrdp_mm *self)
 
 /*****************************************************************************/
 /* frame ack from client */
-int APP_CC
+int
 xrdp_mm_frame_ack(struct xrdp_mm *self, int frame_id)
 {
-    int ex;
+    struct xrdp_encoder *encoder;
 
     LLOGLN(10, ("xrdp_mm_frame_ack:"));
-    self->encoder->frame_id_client = frame_id;
     if (self->wm->client_info->use_frame_acks == 0)
     {
         return 1;
     }
-    ex = self->wm->client_info->max_unacknowledged_frame_count;
-    if (self->encoder->frame_id_client + ex > self->encoder->frame_id_server)
+    encoder = self->encoder;
+    LLOGLN(10, ("xrdp_mm_frame_ack: incoming %d, client %d, server %d",
+           frame_id, encoder->frame_id_client, encoder->frame_id_server));
+    if ((frame_id < 0) || (frame_id > encoder->frame_id_server))
     {
-        if (self->encoder->frame_id_server > self->encoder->frame_id_server_sent)
-        {
-            LLOGLN(10, ("xrdp_mm_frame_ack: frame_id_server %d", self->encoder->frame_id_server));
-            self->encoder->frame_id_server_sent = self->encoder->frame_id_server;
-            self->mod->mod_frame_ack(self->mod, 0, self->encoder->frame_id_server);
-        }
+        /* if frame_id is negative or bigger then what server last sent
+           just ack all sent frames */
+        /* some clients can send big number just to clear all
+           pending frames */
+        encoder->frame_id_client = encoder->frame_id_server;
     }
+    else
+    {
+        /* frame acks can come out of order so ignore older one */
+        encoder->frame_id_client = MAX(frame_id, encoder->frame_id_client);
+    }
+    xrdp_mm_update_module_frame_ack(self);
     return 0;
 }
 
 #if 0
 /*****************************************************************************/
-struct xrdp_painter *APP_CC
+struct xrdp_painter *
 get_painter(struct xrdp_mod *mod)
 {
     struct xrdp_wm *wm;
@@ -2425,7 +2468,7 @@ get_painter(struct xrdp_mod *mod)
 #endif
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_begin_update(struct xrdp_mod *mod)
 {
     struct xrdp_wm *wm;
@@ -2439,7 +2482,7 @@ server_begin_update(struct xrdp_mod *mod)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_end_update(struct xrdp_mod *mod)
 {
     struct xrdp_painter *p;
@@ -2459,7 +2502,7 @@ server_end_update(struct xrdp_mod *mod)
 
 /*****************************************************************************/
 /* got bell signal... try to send to client */
-int DEFAULT_CC
+int
 server_bell_trigger(struct xrdp_mod *mod)
 {
     struct xrdp_wm *wm;
@@ -2471,7 +2514,7 @@ server_bell_trigger(struct xrdp_mod *mod)
 
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_fill_rect(struct xrdp_mod *mod, int x, int y, int cx, int cy)
 {
     struct xrdp_wm *wm;
@@ -2490,7 +2533,7 @@ server_fill_rect(struct xrdp_mod *mod, int x, int y, int cx, int cy)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_screen_blt(struct xrdp_mod *mod, int x, int y, int cx, int cy,
                   int srcx, int srcy)
 {
@@ -2511,7 +2554,7 @@ server_screen_blt(struct xrdp_mod *mod, int x, int y, int cx, int cy,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_paint_rect(struct xrdp_mod *mod, int x, int y, int cx, int cy,
                   char *data, int width, int height, int srcx, int srcy)
 {
@@ -2534,7 +2577,7 @@ server_paint_rect(struct xrdp_mod *mod, int x, int y, int cx, int cy,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_paint_rect_bpp(struct xrdp_mod* mod, int x, int y, int cx, int cy,
                       char* data, int width, int height, int srcx, int srcy,
                       int bpp)
@@ -2556,7 +2599,7 @@ server_paint_rect_bpp(struct xrdp_mod* mod, int x, int y, int cx, int cy,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_composite(struct xrdp_mod* mod, int srcidx, int srcformat,
                  int srcwidth, int srcrepeat, int* srctransform,
                  int mskflags, int mskidx, int mskformat, int mskwidth,
@@ -2607,7 +2650,7 @@ server_composite(struct xrdp_mod* mod, int srcidx, int srcformat,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_paint_rects(struct xrdp_mod* mod, int num_drects, short *drects,
                    int num_crects, short *crects, char *data, int width,
                    int height, int flags, int frame_id)
@@ -2663,7 +2706,6 @@ server_paint_rects(struct xrdp_mod* mod, int num_drects, short *drects,
         enc_data->height = height;
         enc_data->flags = flags;
         enc_data->frame_id = frame_id;
-        mm->encoder->frame_id_server = frame_id;
         if (width == 0 || height == 0)
         {
             LLOGLN(10, ("server_paint_rects: error"));
@@ -2702,7 +2744,18 @@ server_paint_rects(struct xrdp_mod* mod, int num_drects, short *drects,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
+server_session_info(struct xrdp_mod *mod, const char *data, int data_bytes)
+{
+    struct xrdp_wm *wm;
+
+    LLOGLN(10, ("server_session_info:"));
+    wm = (struct xrdp_wm *)(mod->wm);
+    return libxrdp_send_session_info(wm->session, data, data_bytes);
+}
+
+/*****************************************************************************/
+int
 server_set_pointer(struct xrdp_mod *mod, int x, int y,
                    char *data, char *mask)
 {
@@ -2714,7 +2767,7 @@ server_set_pointer(struct xrdp_mod *mod, int x, int y,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_pointer_ex(struct xrdp_mod *mod, int x, int y,
                       char *data, char *mask, int bpp)
 {
@@ -2726,7 +2779,7 @@ server_set_pointer_ex(struct xrdp_mod *mod, int x, int y,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_palette(struct xrdp_mod *mod, int *palette)
 {
     struct xrdp_wm *wm;
@@ -2743,7 +2796,7 @@ server_palette(struct xrdp_mod *mod, int *palette)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_msg(struct xrdp_mod *mod, char *msg, int code)
 {
     struct xrdp_wm *wm;
@@ -2759,14 +2812,14 @@ server_msg(struct xrdp_mod *mod, char *msg, int code)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_is_term(struct xrdp_mod *mod)
 {
     return g_is_term();
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_clip(struct xrdp_mod *mod, int x, int y, int cx, int cy)
 {
     struct xrdp_painter *p;
@@ -2782,7 +2835,7 @@ server_set_clip(struct xrdp_mod *mod, int x, int y, int cx, int cy)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_reset_clip(struct xrdp_mod *mod)
 {
     struct xrdp_painter *p;
@@ -2798,7 +2851,7 @@ server_reset_clip(struct xrdp_mod *mod)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_fgcolor(struct xrdp_mod *mod, int fgcolor)
 {
     struct xrdp_painter *p;
@@ -2816,7 +2869,7 @@ server_set_fgcolor(struct xrdp_mod *mod, int fgcolor)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_bgcolor(struct xrdp_mod *mod, int bgcolor)
 {
     struct xrdp_painter *p;
@@ -2833,7 +2886,7 @@ server_set_bgcolor(struct xrdp_mod *mod, int bgcolor)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_opcode(struct xrdp_mod *mod, int opcode)
 {
     struct xrdp_painter *p;
@@ -2850,7 +2903,7 @@ server_set_opcode(struct xrdp_mod *mod, int opcode)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_mixmode(struct xrdp_mod *mod, int mixmode)
 {
     struct xrdp_painter *p;
@@ -2867,7 +2920,7 @@ server_set_mixmode(struct xrdp_mod *mod, int mixmode)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_brush(struct xrdp_mod *mod, int x_origin, int y_origin,
                  int style, char *pattern)
 {
@@ -2888,7 +2941,7 @@ server_set_brush(struct xrdp_mod *mod, int x_origin, int y_origin,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_pen(struct xrdp_mod *mod, int style, int width)
 {
     struct xrdp_painter *p;
@@ -2906,7 +2959,7 @@ server_set_pen(struct xrdp_mod *mod, int style, int width)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_draw_line(struct xrdp_mod *mod, int x1, int y1, int x2, int y2)
 {
     struct xrdp_wm *wm;
@@ -2924,7 +2977,7 @@ server_draw_line(struct xrdp_mod *mod, int x1, int y1, int x2, int y2)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_add_char(struct xrdp_mod *mod, int font, int character,
                 int offset, int baseline,
                 int width, int height, char *data)
@@ -2943,7 +2996,7 @@ server_add_char(struct xrdp_mod *mod, int font, int character,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_draw_text(struct xrdp_mod *mod, int font,
                  int flags, int mixmode, int clip_left, int clip_top,
                  int clip_right, int clip_bottom,
@@ -2971,7 +3024,7 @@ server_draw_text(struct xrdp_mod *mod, int font,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_reset(struct xrdp_mod *mod, int width, int height, int bpp)
 {
     struct xrdp_wm *wm;
@@ -3047,7 +3100,7 @@ int read_allowed_channel_names(struct list *names, struct list *values)
 
 /* internal function return -1 if name is not in list
  * otherwise return the index 0->count-1*/
-int DEFAULT_CC
+int
 find_name_in_lists(char *inName, struct list *names)
 {
     int reply = -1; /*means not in the list*/
@@ -3102,7 +3155,7 @@ int update_allowed_channel_names(struct xrdp_wm *wm, struct list *names, struct 
 
 /* internal function return 1 if name is in list of channels
  * and if the value is allowed */
-int DEFAULT_CC
+int
 is_channel_enabled(char *inName, struct list *names, struct list *values)
 {
     int reply = 0; /*means not in the list*/
@@ -3195,7 +3248,7 @@ void init_channel_allowed(struct xrdp_wm *wm)
 /*****************************************************************************/
 /* This function returns 1 if the channelID is allowed by rule set
  * returns 0 if not allowed */
-int DEFAULT_CC is_channel_allowed(struct xrdp_wm *wm, int channel_id)
+int is_channel_allowed(struct xrdp_wm *wm, int channel_id)
 {
     int i;
     int reply = 0; /* not allowed */
@@ -3230,7 +3283,7 @@ int DEFAULT_CC is_channel_allowed(struct xrdp_wm *wm, int channel_id)
 
 /*****************************************************************************/
 /*return 0 if the index is not found*/
-int DEFAULT_CC
+int
 server_query_channel(struct xrdp_mod *mod, int index, char *channel_name,
                      int *channel_flags)
 {
@@ -3249,7 +3302,7 @@ server_query_channel(struct xrdp_mod *mod, int index, char *channel_name,
 
 /*****************************************************************************/
 /* returns -1 on error */
-int DEFAULT_CC
+int
 server_get_channel_id(struct xrdp_mod *mod, const char *name)
 {
     struct xrdp_wm *wm;
@@ -3265,7 +3318,7 @@ server_get_channel_id(struct xrdp_mod *mod, const char *name)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_send_to_channel(struct xrdp_mod *mod, int channel_id,
                        char *data, int data_len,
                        int total_data_len, int flags)
@@ -3278,9 +3331,14 @@ server_send_to_channel(struct xrdp_mod *mod, int channel_id,
     {
         if (wm->mm->usechansrv)
         {
-            return 1;
+            /*
+             * Xvnc backend reaches here
+             * should not return 1 as this case is not an error
+             */
+            return 0;
         }
 
+        /* vnc proxy mode reaches here */
         return libxrdp_send_to_channel(wm->session, channel_id, data, data_len,
                                        total_data_len, flags);
     }
@@ -3291,7 +3349,7 @@ server_send_to_channel(struct xrdp_mod *mod, int channel_id,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_create_os_surface(struct xrdp_mod *mod, int rdpindex,
                          int width, int height)
 {
@@ -3316,7 +3374,7 @@ server_create_os_surface(struct xrdp_mod *mod, int rdpindex,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_create_os_surface_bpp(struct xrdp_mod* mod, int rdpindex,
                              int width, int height, int bpp)
 {
@@ -3339,7 +3397,7 @@ server_create_os_surface_bpp(struct xrdp_mod* mod, int rdpindex,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_switch_os_surface(struct xrdp_mod *mod, int rdpindex)
 {
     struct xrdp_wm *wm;
@@ -3387,7 +3445,7 @@ server_switch_os_surface(struct xrdp_mod *mod, int rdpindex)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_delete_os_surface(struct xrdp_mod *mod, int rdpindex)
 {
     struct xrdp_wm *wm;
@@ -3417,7 +3475,7 @@ server_delete_os_surface(struct xrdp_mod *mod, int rdpindex)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_paint_rect_os(struct xrdp_mod *mod, int x, int y, int cx, int cy,
                      int rdpindex, int srcx, int srcy)
 {
@@ -3450,7 +3508,7 @@ server_paint_rect_os(struct xrdp_mod *mod, int x, int y, int cx, int cy,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_set_hints(struct xrdp_mod *mod, int hints, int mask)
 {
     struct xrdp_wm *wm;
@@ -3473,7 +3531,7 @@ server_set_hints(struct xrdp_mod *mod, int hints, int mask)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_window_new_update(struct xrdp_mod *mod, int window_id,
                          struct rail_window_state_order *window_state,
                          int flags)
@@ -3486,7 +3544,7 @@ server_window_new_update(struct xrdp_mod *mod, int window_id,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_window_delete(struct xrdp_mod *mod, int window_id)
 {
     struct xrdp_wm *wm;
@@ -3496,7 +3554,7 @@ server_window_delete(struct xrdp_mod *mod, int window_id)
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_window_icon(struct xrdp_mod *mod, int window_id, int cache_entry,
                    int cache_id, struct rail_icon_info *icon_info,
                    int flags)
@@ -3509,7 +3567,7 @@ server_window_icon(struct xrdp_mod *mod, int window_id, int cache_entry,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_window_cached_icon(struct xrdp_mod *mod,
                           int window_id, int cache_entry,
                           int cache_id, int flags)
@@ -3522,7 +3580,7 @@ server_window_cached_icon(struct xrdp_mod *mod,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_notify_new_update(struct xrdp_mod *mod,
                          int window_id, int notify_id,
                          struct rail_notify_state_order *notify_state,
@@ -3536,7 +3594,7 @@ server_notify_new_update(struct xrdp_mod *mod,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_notify_delete(struct xrdp_mod *mod, int window_id,
                      int notify_id)
 {
@@ -3547,7 +3605,7 @@ server_notify_delete(struct xrdp_mod *mod, int window_id,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_monitored_desktop(struct xrdp_mod *mod,
                          struct rail_monitored_desktop_order *mdo,
                          int flags)
@@ -3559,7 +3617,7 @@ server_monitored_desktop(struct xrdp_mod *mod,
 }
 
 /*****************************************************************************/
-int DEFAULT_CC
+int
 server_add_char_alpha(struct xrdp_mod* mod, int font, int character,
                       int offset, int baseline,
                       int width, int height, char* data)

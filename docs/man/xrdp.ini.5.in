@@ -96,12 +96,6 @@ Processing Standard 140-1 validated encryption methods.
 .RE
 
 .TP
-\fBdisableSSLv3\fP=\fI[true|false]\fP
-If set to \fB1\fP, \fBtrue\fP or \fByes\fP, \fBxrdp\fP will not accept SSLv3 connections.
-If not specified, defaults to \fBfalse\fP.
-This parameter is effective only if \fBsecurity_layer\fP is set to \fBtls\fP or \fBnegotiate\fP.
-
-.TP
 \fBfork\fP=\fI[true|false]\fP
 If set to \fB1\fR, \fBtrue\fR or \fByes\fR for each incoming connection \fBxrdp\fR(8) forks a sub-process instead of using threads.
 
@@ -150,6 +144,12 @@ Negotiate these security methods with clients.
 .RE
 
 .TP
+\fBssl_protocols\fP=\fI[SSLv3] [TLSv1] [TLSv1.1] [TLSv1.2]\fP
+Enables the specified SSL/TLS protocols. Each value should be separated by comma.
+SSLv2 is always disabled. At least one protocol should be given to accept TLS connections.
+This parameter is effective only if \fBsecurity_layer\fP is set to \fBtls\fP or \fBnegotiate\fP.
+
+.TP
 \fBtcp_keepalive\fP=\fI[true|false]\fP
 Regulate if the listening socket uses socket option \fBSO_KEEPALIVE\fP.
 If set to \fB1\fP, \fBtrue\fP or \fByes\fP and the network connection disappears
@@ -168,8 +168,8 @@ Specify send/recv buffer sizes in bytes.  The default value depends on operating
 
 .TP
 \fBtls_ciphers\fP=\fIcipher_suite\fP
-Specifies TLS cipher suite.  The format of this parameter is equivalent to which
-\fBopenssl\fP(1) ciphers subcommand accepts.
+Specifies TLS cipher suite. The format of this parameter is equivalent
+to which \fBopenssl\fP(1) ciphers subcommand accepts.
 
 (ex. $ openssl ciphers 'HIGH:!ADH:!SHA1')
 
@@ -274,14 +274,19 @@ The name displayed in \fBxrdp\fR(8) login window's combo box.
 Sets the library to be used with this connection.
 
 .TP
-\fBusername\fR=\fI<username>\fR|\fIask\fR
+\fBusername\fR=\fI<username>\fR|\fI{base64}<base64-encoded-username>\fR|\fIask\fR
 Specifies the username used for authenticating in the connection.
 If set to \fIask\fR, user name should be provided in the login window.
 
+If the username includes comment out symbols such as '!', '#', or ';', the username can be
+provided in base64 form prefixing "{base64}".
+
 .TP
-\fBpassword\fR=\fI<password>\fR|\fIask\fR
+\fBpassword\fR=\fI<password>\fR|\fI{base64}<base64-encoded-password>\fR|\fIask\fR
 Specifies the password used for authenticating in the connection.
 If set to \fIask\fR, password should be provided in the login window.
+
+This parameter can be provided in base64 form as well as username. See also examples below.
 
 .TP
 \fBip\fR=\fI127.0.0.1\fR
@@ -310,13 +315,22 @@ This is an example \fBxrdp.ini\fR:
 bitmap_cache=true
 bitmap_compression=true
 
-[vnc1]
-name=sesman
-lib=../vnc/libvnc.so
+[Xorg]
+name=Xorg
+lib=libxup.so
 username=ask
 password=ask
 ip=127.0.0.1
-port=\-1
+port=-1
+code=20
+
+[vnc-any]
+name=vnc-any
+lib=libvnc.so
+ip=ask
+port=ask5900
+username=na
+password={base64}cGFzc3dvcmQhCg==
 .fi
 
 .SH "FILES"
