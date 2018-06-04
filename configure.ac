@@ -58,7 +58,7 @@ AC_ARG_WITH([socketdir],
 AC_SUBST([socketdir], [$with_socketdir])
 
 AC_ARG_WITH([systemdsystemunitdir],
-        AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd service files]),
+        AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd service files, no to disable]),
         [], [
 if test "x$linux" = xyes; then
   with_systemdsystemunitdir=$($PKG_CONFIG --variable=systemdsystemunitdir systemd)
@@ -96,7 +96,7 @@ AC_ARG_ENABLE(pamuserpass, AS_HELP_STRING([--enable-pamuserpass],
               [], [enable_pamuserpass=no])
 AM_CONDITIONAL(SESMAN_PAMUSERPASS, [test x$enable_pamuserpass = xyes])
 AC_ARG_ENABLE(pam-config, AS_HELP_STRING([--enable-pam-config=CONF],
-              [Select PAM config to install: debian, redhat, suse, freebsd, unix
+              [Select PAM config to install: arch, debian, redhat, suse, freebsd, macos, unix
                (default: autodetect)]))
 
 AC_ARG_ENABLE(xrdpdebug, AS_HELP_STRING([--enable-xrdpdebug],
@@ -328,7 +328,8 @@ AC_SUBST([moduledir], '${libdir}/xrdp')
 AC_ARG_ENABLE([strict-locations],
   [AS_HELP_STRING([--enable-strict-locations],
                   [Use standard Autoconf install directories unless overridden
-                   (default: use /etc and /var)])])
+                   (default: use /etc and /var)])],
+                  [], [enable_strict_locations=no])
 
 if test "x$enable_strict_locations" != "xyes"; then
   sysconfdir="/etc";
@@ -370,3 +371,30 @@ AC_CONFIG_FILES([
 ])
 
 AC_OUTPUT
+
+echo ""
+echo "xrdp will be compiled with:"
+echo ""
+echo "  mp3lame         $enable_mp3lame"
+echo "  opus            $enable_opus"
+echo "  fdkaac          $enable_fdkaac"
+echo "  jpeg            $enable_jpeg"
+echo "  turbo jpeg      $enable_tjpeg"
+echo "  rfxcodec        $enable_rfxcodec"
+echo "  painter         $enable_painter"
+echo "  pixman          $enable_pixman"
+echo "  fuse            $enable_fuse"
+echo "  ipv6            $enable_ipv6"
+echo "  ipv6only        $enable_ipv6only"
+echo "  vsock           $enable_vsock"
+echo "  pam             $enable_pam"
+echo "  kerberos        $enable_kerberos"
+echo "  debug           $enable_xrdpdebug"
+echo ""
+echo "  strict_locations        $enable_strict_locations"
+echo "  prefix                  $prefix"
+echo "  exec_prefix             $exec_prefix"
+echo "  libdir                  $libdir"
+echo "  bindir                  $bindir"
+echo "  sysconfdir              $sysconfdir"
+echo "#define CONFIGURE_STRING \"$@\"" > configure_params.h
